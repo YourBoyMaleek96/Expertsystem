@@ -1,5 +1,9 @@
+import tkinter as tk
+from tkinter import ttk
+from PIL import Image, ImageTk
 import clips
 
+# Define the CLIPS environment and rules
 DEFTEMPLATE_STRING = """
 (deftemplate player
   (slot name (type STRING))
@@ -13,7 +17,7 @@ DEFTEMPLATE_STRING = """
 
 DEFRULE_STRING = """
 (defrule calculate-points
-  ?player <- (player (name ?name) (ppg ?ppg) (apg ?apg) (rpg ?rpg) (team_rank ?team_rank) (past_mvp ?past_mvp) (points ?points))
+  ?player <- (player (name ?name) (ppg ?ppg) (apg ?apg) (rpg ?rpg) (team_rank ?team_rank) (past_mvp ?past_mvp) (points 0))
   =>
   (bind ?new_points 0)
 
@@ -48,24 +52,26 @@ DEFRULE_STRING = """
   (printout t "Player: " ?name " Points: " ?new_points crlf))
 """
 
+# Initialize the CLIPS environment
 environment = clips.Environment()
 
-# define constructs
+# Define constructs
 environment.build(DEFTEMPLATE_STRING)
 environment.build(DEFRULE_STRING)
 
-# retrieve the fact template
+# Retrieve the fact template
 template = environment.find_template('player')
 
-# assert new facts for each player
+# Sample player data with images
 players = [
-    {"name": "Nikola Jokic", "ppg": 26.6, "apg": 9, "rpg": 12.4, "team_rank": 3, "past_mvp": 2},
-    {"name": "Shai Gilgeous Alexander", "ppg": 30.4, "apg": 6.2, "rpg": 5.6, "team_rank": 2, "past_mvp": 0},
-    {"name": "Luka Doncic", "ppg": 33.9, "apg": 9.8, "rpg": 9.2, "team_rank": 6, "past_mvp": 0},
-    {"name": "Giannis Antetokounmpo", "ppg": 30.4, "apg": 6.5, "rpg": 11.5, "team_rank": 8, "past_mvp": 2},
-    {"name": "Jayson Tatum", "ppg": 26.9, "apg": 4.9, "rpg": 8.1, "team_rank": 1, "past_mvp": 0},
+    {"name": "Nikola Jokic", "ppg": 26.6, "apg": 9, "rpg": 12.4, "team_rank": 3, "past_mvp": 2, "image": "Nikola Jokic.jpg"},
+    {"name": "Shai Gilgeous Alexander", "ppg": 30.4, "apg": 6.2, "rpg": 5.6, "team_rank": 2, "past_mvp": 0, "image": "Shai Alexander.jpg"},
+    {"name": "Luka Doncic", "ppg": 33.9, "apg": 9.8, "rpg": 9.2, "team_rank": 6, "past_mvp": 0, "image": "Luka Donic.jpg"},
+    {"name": "Giannis Antetokounmpo", "ppg": 30.4, "apg": 6.5, "rpg": 11.5, "team_rank": 8, "past_mvp": 2, "image": "Giannis Antetokounmpo.jpg"},
+    {"name": "Jayson Tatum", "ppg": 26.9, "apg": 4.9, "rpg": 8.1, "team_rank": 1, "past_mvp": 0, "image": "Jayson Tatum.jpg"},
 ]
 
+# Assert new facts for each player
 for player in players:
     template.assert_fact(name=player["name"],
                          ppg=float(player["ppg"]),
@@ -75,19 +81,60 @@ for player in players:
                          past_mvp=int(player["past_mvp"]),
                          points=0)
 
-
-# execute the activations in the agenda
+# Execute the activations in the agenda
 environment.run()
 
-# Retrieve and print the player with the highest points
-facts = environment.facts()
-mvp = None
-max_points = -1
+# Retrieve and sort players by points
+facts = [fact for fact in environment.facts() if fact.template.name == 'player']
+sorted_facts = sorted(facts, key=lambda x: x['points'], reverse=True)
 
-for fact in facts:
-    if fact.template.name == 'player':
-        if fact['points'] > max_points:
-            max_points = fact['points']
-            mvp = fact['name']
+class PlayerGUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("NBA MVP Player Rankings")
+        self.geometry("600x800")
+        self.player_data = {player["name"]: player for player in players}  # Store player data with images
+        self.create_widgets()
 
-print(f"The MVP is: {mvp} with {max_points} points")
+    def create_widgets(self):
+        for i, fact in enumerate(sorted_facts):
+            frame = ttk.Frame(self)
+            frame.pack(fill=tk.BOTH, expand=True, pady=10)
+
+            # Load and display the player's image
+            player = self.player_data[fact['name']]
+            img = Image.open(player['image'])
+            img = img.resize((100, 100), Image.LANCZOS)
+            img_tk = ImageTk.PhotoImage(img)
+            img_label = tk.Label(frame, image=img_tk)
+            img_label.image = img_tk  # Keep a reference to the image
+            img_label.grid(row=0, column=0, rowspan=2)
+
+            # Display the player's name and points
+            name_label = tk.Label(frame, text=f"{i + 1}. {fact['name']}", font=("Arial", 16))
+            name_label.grid(row=0, column=1, sticky=tk.W)
+            points_label = tk.Label(frame, text=f"Points: {fact['points']}", font=("Arial", 12))
+            points_label.grid(row=1, column=1, sticky=tk.W)
+
+            # Add the "View Stats" button
+            stats_button = ttk.Button(frame, text="View Stats", command=lambda fact=fact: self.show_stats(fact))
+            stats_button.grid(row=0, column=2, rowspan=2, padx=10)
+
+    def show_stats(self, fact):
+        stats_window = tk.Toplevel(self)
+        stats_window.title(f"Stats for {fact['name']}")
+        stats = f"""
+        Name: {fact['name']}
+        PPG: {fact['ppg']}
+        APG: {fact['apg']}
+        RPG: {fact['rpg']}
+        Team Rank: {fact['team_rank']}
+        Past MVPs: {fact['past_mvp']}
+        Points: {fact['points']}
+        """
+        stats_label = tk.Label(stats_window, text=stats, font=("Arial", 12))
+        stats_label.pack()
+
+if __name__ == "__main__":
+    app = PlayerGUI()
+    app.mainloop()
